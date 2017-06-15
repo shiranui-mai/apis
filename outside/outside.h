@@ -24,6 +24,7 @@ static void* ngx_http_outside_create_loc_conf(ngx_conf_t* cf);
 static char* ngx_http_outside_merge_loc_conf(ngx_conf_t* cf, void* parent, void* child);
 
 static char* ngx_http_outside(ngx_conf_t* cf, ngx_command_t* cmd, void* conf);
+static char* ngx_http_outside_test(ngx_conf_t* cf, ngx_command_t* cmd, void* conf);
 
 // post handler
 static void outside_post_handler(ngx_http_request_t* r);
@@ -45,6 +46,14 @@ static ngx_command_t ngx_http_outside_commands[] = {
 		ngx_http_outside,
 		NGX_HTTP_LOC_CONF_OFFSET,
 		offsetof(ngx_http_outside_conf_t, finish.uri),
+		NULL
+	},
+	{
+		ngx_string("outside_test"),
+		NGX_HTTP_LOC_CONF | NGX_CONF_NOARGS,
+		ngx_http_outside_test,
+		0,
+		0,
 		NULL
 	},
 	ngx_null_command	
@@ -76,5 +85,7 @@ ngx_module_t ngx_http_outside_module = {
 	NULL,
 	NGX_MODULE_V1_PADDING
 };
+
+static ngx_chain_t* get_last_chain(ngx_chain_t* ch);
 
 #endif
