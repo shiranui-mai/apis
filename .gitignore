@@ -54,3 +54,8 @@ dkms.conf
 # director
 nginx/
 test/
+
+# apis
+bin/
+logs/
+*_temp/

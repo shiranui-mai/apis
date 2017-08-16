@@ -5,4 +5,5 @@ dir=$PWD
 cd nginx
 
 ./auto/configure \
-	--add-dynamic-module=$dir/outside
+	--with-debug \
+	--add-module=$dir/outside
