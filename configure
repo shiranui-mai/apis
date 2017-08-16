@@ -1,0 +1,8 @@
+#!/bin/sh
+
+dir=$PWD
+
+cd nginx
+
+./auto/configure \
+	--add-dynamic-module=$dir/outside
