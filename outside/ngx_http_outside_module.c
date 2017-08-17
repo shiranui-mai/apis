@@ -23,6 +23,19 @@ static ngx_int_t invoke_subrequest(ngx_http_request_t* r, outside_service_t* s)
     return ngx_http_subrequest(r, &s->uri, NULL, &tmp, psr, NGX_HTTP_SUBREQUEST_IN_MEMORY);
 }
 
+static ngx_int_t verify_args(ngx_http_request_t* r)
+{
+	if (r->method == NGX_HTTP_GET) {
+        ngx_log_debug(NGX_LOG_DEBUG_HTTP, r->connection->log, 0, "[tzj] [verify_args] method: GET. args:  %V\n", &(r->args));
+	} else if (r->method == NGX_HTTP_POST) {
+		ngx_str_t args = ngx_null_string;
+		args.data = r->header_in->pos;
+		args.len  = r->header_in->last - r->header_in->pos; 
+        ngx_log_debug(NGX_LOG_DEBUG_HTTP, r->connection->log, 0, "[tzj] [verify_args] method: POST. args:  %V\n", &args);
+	}
+	return NGX_OK;
+}
+
 static ngx_int_t ngx_http_outside_handler(ngx_http_request_t* r) 
 {
 	ngx_http_outside_conf_t* cf = ngx_http_get_module_loc_conf(r, ngx_http_outside_module);
@@ -31,8 +44,31 @@ static ngx_int_t ngx_http_outside_handler(ngx_http_request_t* r)
         return NGX_ERROR;
     }
 
-    //  Invoke first subrequest
-    return invoke_subrequest(r, (outside_service_t*)cf);
+	if (verify_args(r) == NGX_OK) {
+    	//  Invoke first subrequest
+    	return invoke_subrequest(r, (outside_service_t*)cf);
+	} else {
+		// output
+		ngx_chain_t out;
+		ngx_buf_t* b = ngx_pcalloc(r->pool, sizeof(ngx_buf_t));
+
+		out.buf = b;
+    	out.next = NULL;
+
+    	b->pos = (u_char*)"error paramet.";
+    	b->last = b->pos + sizeof("error paramet.") - 1;
+    	b->memory = 1;
+    	b->last_buf = 1;
+
+		r->headers_out.content_type.len  = sizeof("text/plain") - 1;
+		r->headers_out.content_type.data =  (u_char*)"text/plain";
+		r->headers_out.status = NGX_HTTP_OK;
+		r->headers_out.content_length_n = sizeof("error paramet.") - 1;
+		ngx_http_send_header(r);
+		return ngx_http_output_filter(r, &out);
+	}
+
+	return NGX_ERROR;
 }
 
 static void* ngx_http_outside_create_loc_conf(ngx_conf_t* cf)
