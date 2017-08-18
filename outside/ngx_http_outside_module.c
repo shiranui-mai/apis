@@ -1,9 +1,9 @@
 #include "outside.h"
 
-// #define HEALTH_CHECK_SUCCESS "Health check success.   "
-#define HEALTH_CHECK_SUCCESS "123"
-
-// extern void ngx_http_close_request(ngx_http_request_t *r, ngx_int_t error);
+typedef struct _params {
+	ngx_str_t  key;
+	ngx_str_t  val;
+}params;
 
 static ngx_int_t invoke_subrequest(ngx_http_request_t* r, outside_service_t* s)
 {
@@ -25,14 +25,42 @@ static ngx_int_t invoke_subrequest(ngx_http_request_t* r, outside_service_t* s)
 
 static ngx_int_t verify_args(ngx_http_request_t* r)
 {
+	ngx_list_t* tmp_list = ngx_list_create(r->pool, 24, sizeof(params));	
+	if (tmp_list == NULL) {
+		return NGX_ERROR;
+	}
+
+	ngx_str_t args = ngx_null_string;
 	if (r->method == NGX_HTTP_GET) {
-        ngx_log_debug(NGX_LOG_DEBUG_HTTP, r->connection->log, 0, "[tzj] [verify_args] method: GET. args:  %V\n", &(r->args));
+		ngx_memcpy(&arg, &(r->args), sizeof(args));
 	} else if (r->method == NGX_HTTP_POST) {
-		ngx_str_t args = ngx_null_string;
 		args.data = r->header_in->pos;
 		args.len  = r->header_in->last - r->header_in->pos; 
-        ngx_log_debug(NGX_LOG_DEBUG_HTTP, r->connection->log, 0, "[tzj] [verify_args] method: POST. args:  %V\n", &args);
 	}
+    ngx_log_debug(NGX_LOG_DEBUG_HTTP, r->connection->log, 0, "[tzj] [verify_args] method: %d. args:  %V\n", r->method, &args);
+
+	size_t tmp_len = args.len;
+	u_char* params_begin = args.data;
+	while (params_begin != NULL) {
+		/* each param */
+		u_char* k = ngx_strchr(params_begin, '=');	
+		if (k == NULL) 	return NGX_ERROR;	
+
+		params* p = (params*)ngx_list_push(tmp_list);
+		if (p == NULL)  return NGX_ERROR;
+		
+		p->key.data = params_begin;
+		p->key.len  = k - params_begin;
+		tmp_len -= p->key.len + 1;
+
+		/* Get next param */
+		params_begin = ngx_strchr(params_begin, '&');
+
+		p->val.data = k+1;
+		p->val.len  = params_begin?params_begin - k:tmp_len - 1;
+		tmp_len -= p->val.len + 1;
+	}
+
 	return NGX_OK;
 }
 
