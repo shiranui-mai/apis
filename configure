@@ -6,4 +6,5 @@ cd nginx
 
 ./auto/configure \
 	--with-debug \
+	--with-ld-opt=-lprotobuf \
 	--add-module=$dir/outside
