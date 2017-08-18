@@ -3,3 +3,8 @@ all:
 	@mkdir -p ./logs/
 	@mkdir -p ./bin/
 	@cp ./nginx/objs/nginx ./bin
+
+clean:
+	make clean -C ./nginx/
+	@rm -rf ./bin/*
+	@rm -rf ./logs/*
