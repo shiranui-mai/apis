@@ -10,6 +10,6 @@ typedef struct _conn_t {
 	int  port;
 }conn_t;
 
-int outside_connect(conn_t conn, ngx_log_t *log);
+int outside_connect(conn_t conn, ngx_log_t *log, ngx_connection_t** cc);
 
 #endif

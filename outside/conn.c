@@ -1,6 +1,6 @@
 #include "conn.h"
 
-int outside_connect(conn_t conn, ngx_log_t *log)
+int outside_connect(conn_t conn, ngx_log_t *log, ngx_connection_t** cc)
 {
     int                rc;
     ngx_int_t          event;
@@ -31,12 +31,7 @@ int outside_connect(conn_t conn, ngx_log_t *log)
         return NGX_ERROR;
     }
 
-    if (ngx_nonblocking(s) == -1) {
-        ngx_log_error(NGX_LOG_ALERT, log, ngx_socket_errno,
-                      ngx_nonblocking_n " failed");
-
-        goto failed;
-    }
+	*cc = c;
 
     rev = c->read;
     wev = c->write;
@@ -59,11 +54,14 @@ int outside_connect(conn_t conn, ngx_log_t *log)
     servaddr.sin_port = htons(conn.port);
     servaddr.sin_addr.s_addr = inet_addr(conn.host);
 
+	ngx_socket_errno = 0;
     rc = connect(s, (struct sockaddr *)&servaddr, sizeof(servaddr));
 
     if (rc == -1) {
         err = ngx_socket_errno;
 
+        ngx_log_error(NGX_LOG_ERR, log, err, "[tzj] connect() to %s failed. err: %d",
+                      conn.host, err);
 
         if (err != NGX_EINPROGRESS
 #if (NGX_WIN32)
@@ -112,6 +110,13 @@ int outside_connect(conn_t conn, ngx_log_t *log)
         wev->ready = 1;
 
         return NGX_OK;
+    }
+
+    if (ngx_nonblocking(s) == -1) {
+        ngx_log_error(NGX_LOG_ALERT, log, ngx_socket_errno,
+                      ngx_nonblocking_n " failed");
+
+        goto failed;
     }
 
     if (ngx_event_flags & NGX_USE_IOCP_EVENT) {

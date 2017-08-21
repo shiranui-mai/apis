@@ -74,13 +74,14 @@ static ngx_int_t ngx_http_outside_handler(ngx_http_request_t* r)
         return NGX_ERROR;
     }
 
-	/*
+	ngx_connection_t* pc = NULL;
 	conn_t c;
 	ngx_memzero(&c, sizeof(c));
 	strncpy(c.host, "172.16.71.180", 64);
 	c.port = 12345;
-	outside_connect(c, r->connection->log);
-*/
+	outside_connect(c, r->connection->log, &pc);
+	ngx_free_connection(pc);
+
 	if (verify_args(r) == NGX_OK) {
     	//  Invoke first subrequest
     	return invoke_subrequest(r, (outside_service_t*)cf);
