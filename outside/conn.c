@@ -1,26 +1,30 @@
 #include "conn.h"
 
-int connect(conn_t conn)
+int outside_connect(conn_t conn, ngx_log_t *log)
 {
+    int                rc;
+    ngx_int_t          event;
+    ngx_err_t          err;
+    ngx_uint_t         level;
     ngx_socket_t       s;
     ngx_event_t       *rev, *wev;
     ngx_connection_t  *c;
 
     s = ngx_socket(AF_INET, SOCK_STREAM, 0);
 
-    ngx_log_debug1(NGX_LOG_DEBUG_EVENT, &rec->log, 0, "TCP socket %d", s);
+    ngx_log_debug1(NGX_LOG_DEBUG_EVENT, log, 0, "TCP socket %d", s);
 
     if (s == (ngx_socket_t) -1) {
-        ngx_log_error(NGX_LOG_ALERT, &rec->log, ngx_socket_errno,
+        ngx_log_error(NGX_LOG_ALERT, log, ngx_socket_errno,
                       ngx_socket_n " failed");
         return NGX_ERROR;
     }
 
-    c = ngx_get_connection(s, &rec->log);
+    c = ngx_get_connection(s, log);
 
     if (c == NULL) {
         if (ngx_close_socket(s) == -1) {
-            ngx_log_error(NGX_LOG_ALERT, &rec->log, ngx_socket_errno,
+            ngx_log_error(NGX_LOG_ALERT, log, ngx_socket_errno,
                           ngx_close_socket_n "failed");
         }
 
@@ -28,11 +32,17 @@ int connect(conn_t conn)
     }
 
     if (ngx_nonblocking(s) == -1) {
-        ngx_log_error(NGX_LOG_ALERT, &rec->log, ngx_socket_errno,
+        ngx_log_error(NGX_LOG_ALERT, log, ngx_socket_errno,
                       ngx_nonblocking_n " failed");
 
         goto failed;
     }
+
+    rev = c->read;
+    wev = c->write;
+
+    rev->log = log;
+    wev->log = log;
 
     if (ngx_add_conn) {
         if (ngx_add_conn(c) == NGX_ERROR) {
@@ -40,8 +50,8 @@ int connect(conn_t conn)
         }
     }
 
-    ngx_log_debug3(NGX_LOG_DEBUG_EVENT, &rec->log, 0,
-                   "connect to %V, fd:%d #%uA", &rec->server, s, c->number);
+    ngx_log_debug3(NGX_LOG_DEBUG_EVENT, log, 0,
+                   "connect to %s, fd:%d #%uA", conn.host, s, c->number);
 
 	struct sockaddr_in servaddr;
     memset(&servaddr, 0, sizeof(servaddr));
@@ -82,8 +92,8 @@ int connect(conn_t conn)
                 level = NGX_LOG_CRIT;
             }
 
-            ngx_log_error(level, c->log, err, "connect() to %V failed",
-                          &rec->server);
+            ngx_log_error(level, log, err, "connect() to %s failed",
+                          conn.host);
 
             goto failed;
         }
@@ -97,7 +107,7 @@ int connect(conn_t conn)
             return NGX_AGAIN;
         }
 
-        ngx_log_debug0(NGX_LOG_DEBUG_EVENT, &rec->log, 0, "connected");
+        ngx_log_debug0(NGX_LOG_DEBUG_EVENT, log, 0, "connected");
 
         wev->ready = 1;
 
@@ -106,11 +116,11 @@ int connect(conn_t conn)
 
     if (ngx_event_flags & NGX_USE_IOCP_EVENT) {
 
-        ngx_log_debug1(NGX_LOG_DEBUG_EVENT, &rec->log, ngx_socket_errno,
+        ngx_log_debug1(NGX_LOG_DEBUG_EVENT, log, ngx_socket_errno,
                        "connect(): %d", rc);
 
         if (ngx_blocking(s) == -1) {
-            ngx_log_error(NGX_LOG_ALERT, &rec->log, ngx_socket_errno,
+            ngx_log_error(NGX_LOG_ALERT, log, ngx_socket_errno,
                           ngx_blocking_n " failed");
             goto failed;
         }
@@ -156,7 +166,7 @@ int connect(conn_t conn)
         return NGX_AGAIN;
     }
 
-    ngx_log_debug0(NGX_LOG_DEBUG_EVENT, &rec->log, 0, "connected");
+    ngx_log_debug0(NGX_LOG_DEBUG_EVENT, log, 0, "connected");
 
 
     return NGX_OK;

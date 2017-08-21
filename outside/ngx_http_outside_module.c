@@ -1,5 +1,7 @@
 #include "outside.h"
 
+#include "conn.h"
+
 typedef struct _params {
 	ngx_str_t  key;
 	ngx_str_t  val;
@@ -72,6 +74,13 @@ static ngx_int_t ngx_http_outside_handler(ngx_http_request_t* r)
         return NGX_ERROR;
     }
 
+	/*
+	conn_t c;
+	ngx_memzero(&c, sizeof(c));
+	strncpy(c.host, "172.16.71.180", 64);
+	c.port = 12345;
+	outside_connect(c, r->connection->log);
+*/
 	if (verify_args(r) == NGX_OK) {
     	//  Invoke first subrequest
     	return invoke_subrequest(r, (outside_service_t*)cf);
@@ -109,6 +118,8 @@ static void* ngx_http_outside_create_loc_conf(ngx_conf_t* cf)
     conf->user_filter.fin = 0;
     ngx_str_null(&conf->finish.uri);
     conf->finish.fin = 1;
+
+
 	return conf;
 }
 static char* ngx_http_outside_merge_loc_conf(ngx_conf_t* cf, void* parent, void* child)
