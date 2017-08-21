@@ -80,7 +80,7 @@ static ngx_int_t ngx_http_outside_handler(ngx_http_request_t* r)
 	strncpy(c.host, "172.16.71.180", 64);
 	c.port = 12345;
 	outside_connect(c, r->connection->log, &pc);
-	ngx_free_connection(pc);
+	ngx_close_connection(pc);
 
 	if (verify_args(r) == NGX_OK) {
     	//  Invoke first subrequest
