@@ -32,7 +32,7 @@ static ngx_int_t verify_args(ngx_http_request_t* r)
 
 	ngx_str_t args = ngx_null_string;
 	if (r->method == NGX_HTTP_GET) {
-		ngx_memcpy(&arg, &(r->args), sizeof(args));
+		ngx_memcpy(&args, &(r->args), sizeof(args));
 	} else if (r->method == NGX_HTTP_POST) {
 		args.data = r->header_in->pos;
 		args.len  = r->header_in->last - r->header_in->pos; 
@@ -43,7 +43,7 @@ static ngx_int_t verify_args(ngx_http_request_t* r)
 	u_char* params_begin = args.data;
 	while (params_begin != NULL) {
 		/* each param */
-		u_char* k = ngx_strchr(params_begin, '=');	
+		u_char* k = (u_char*)ngx_strchr(params_begin, '=');	
 		if (k == NULL) 	return NGX_ERROR;	
 
 		params* p = (params*)ngx_list_push(tmp_list);
@@ -54,10 +54,10 @@ static ngx_int_t verify_args(ngx_http_request_t* r)
 		tmp_len -= p->key.len + 1;
 
 		/* Get next param */
-		params_begin = ngx_strchr(params_begin, '&');
+		params_begin = (u_char*)ngx_strchr(params_begin, '&');
 
 		p->val.data = k+1;
-		p->val.len  = params_begin?params_begin - k:tmp_len - 1;
+		p->val.len  = params_begin?(size_t)(params_begin - k):(tmp_len - 1);
 		tmp_len -= p->val.len + 1;
 	}
 
