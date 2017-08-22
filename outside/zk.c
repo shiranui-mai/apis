@@ -1,43 +1,60 @@
 #include "zk.h"
 
-void zk_watcher(zhandle_t *zh, int type, int state, const char *path,void *watcherCtx)
-{
-}
+#include <unistd.h>
 
-void zk_children_watcher(zhandle_t *zh, int type, int state, const char *path,void *watcherCtx)
-{
-}
+static void fn_zk_children_watcher(zhandle_t *zh, int type, int state, const char *path,void *watcherCtx);
 
-void get_children(zk* pzk, const char* path, struct String_vector& strings)
+static void fn_get_zknode_children_completion(int rc, const struct String_vector* strings, const void* data)
 {
-	struct Stat stat;
-
-	int flag = zoo_wget_children2(pzk->zk_handle, path, zk_children_watcher, NULL, &strings, &stat)
-	if (ZOK == flag) {
-		for (int i = 0; i < strings.count; ++i)
-			printf("%s\n", strings.data[i]);
+	zk* pzk = (zk*)data;
+    ngx_log_debug(NGX_LOG_DEBUG_HTTP, pzk->log, 0, "[tzj] [fn_get_zknode_children_completion] rc: %d\n", rc);
+	if (ZOK == rc) {
+		int i = 0;
+		for (; i < strings->count; ++i) {
+    		ngx_log_debug(NGX_LOG_DEBUG_HTTP, pzk->log, 0, "[tzj] [fn_get_zknode_children_completion] data:  %s\n", strings->data[i]);
+			char buf[128] = "/live/service/";
+			strcat(buf, strings->data[i]);
+			zoo_awget_children(pzk->zk_handle, buf, fn_zk_children_watcher, pzk, fn_get_zknode_children_completion, pzk);
+		}
+			// printf("%s\n", strings.data[i]);
 	}
+}
+
+static void fn_zk_children_watcher(zhandle_t *zh, int type, int state, const char *path,void *watcherCtx)
+{
+	zk* pzk = (zk*)watcherCtx;
+    ngx_log_debug(NGX_LOG_DEBUG_HTTP, pzk->log, 0, "[tzj] [fn_zk_children_watcher] path:  %s\n", path);
+	zoo_awget_children(pzk->zk_handle, path, fn_zk_children_watcher, pzk, fn_get_zknode_children_completion, pzk);
+}
+
+int get_children(zk* pzk, const char* path, struct String_vector* strings)
+{
+	return zoo_awget_children(pzk->zk_handle, path,fn_zk_children_watcher, pzk, fn_get_zknode_children_completion, pzk);
 }
 
 int read_all_node(zk* pzk)
 {
+    ngx_log_debug(NGX_LOG_DEBUG_HTTP, pzk->log, 0, "[tzj] [read_all_node]\n");
 	struct String_vector nodes;
-	int rc = get_children(pzk, "/dis/", nodes);
+	return get_children(pzk, "/live/service", &nodes);
 }
 
 int init_zk(zk* pzk)
 {
 	zoo_set_debug_level(ZOO_LOG_LEVEL_DEBUG);
 
-	pzk->zk_handle = zookeeper_init("ZOOKEEPER_HOST", zk_watcher, 30000, 0, pzk, 0);
-	if (NULL == pzk->zk_handle)
-	{
-		return -1;
-	}
+	do {
+		if ((pzk->zk_handle = zookeeper_init((const char*)pzk->host.data, NULL, 30000, 0, pzk, 0)) == NULL)
+			sleep(1);
+	} while (pzk->zk_handle == NULL);
 
 	if (pzk->svr == NULL) {
 		pzk->svr = (svr_t*)ngx_pcalloc(pzk->pool, sizeof(svr_t));
 	}
 
 	return read_all_node(pzk);
+}
+void close_zk(zk* pzk)
+{
+	zookeeper_close(pzk->zk_handle);
 }

@@ -17,20 +17,29 @@ typedef struct {
     outside_service_t user_filter; 
     outside_service_t finish; 
     /* End All 3rd services */
+	ngx_str_t zk_host;
 } ngx_http_outside_conf_t;
 
 // config
 static void* ngx_http_outside_create_loc_conf(ngx_conf_t* cf);
-static char* ngx_http_outside_merge_loc_conf(ngx_conf_t* cf, void* parent, void* child);
 
 static char* ngx_http_outside(ngx_conf_t* cf, ngx_command_t* cmd, void* conf);
+static char* ngx_http_zk_host(ngx_conf_t* cf, ngx_command_t* cmd, void* conf);
 
 // post handler
-static void outside_post_handler(ngx_http_request_t* r);
+static ngx_int_t outside_post_handler(ngx_http_request_t* r);
 // Child post handler
 static ngx_int_t outside_subrequest_post_handler(ngx_http_request_t* r, void* data, ngx_int_t rc);
 
 static ngx_command_t ngx_http_outside_commands[] = {
+	{
+		ngx_string("zk_host"),
+		NGX_HTTP_LOC_CONF | NGX_CONF_TAKE1,
+		ngx_http_zk_host,
+		NGX_HTTP_LOC_CONF_OFFSET,
+		offsetof(ngx_http_outside_conf_t, zk_host),
+		NULL
+	},
 	{
 		ngx_string("user_filter"),
 		NGX_HTTP_LOC_CONF | NGX_CONF_TAKE1,
@@ -58,7 +67,7 @@ static ngx_http_module_t ngx_http_outside_module_ctx = {
 	NULL,
 	NULL,
 	ngx_http_outside_create_loc_conf,
-	ngx_http_outside_merge_loc_conf
+	NULL
     // NULL, NULL
 };
 

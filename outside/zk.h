@@ -6,7 +6,6 @@
 #include <ngx_event.h>
 
 #include <zookeeper/zookeeper.h>
-#include <zookeeper/zookeeper_log.h>
 
 typedef struct _host_data {
 	ngx_str_t host;
@@ -25,7 +24,8 @@ typedef struct _svr_t {
 }svr_t;
 
 typedef struct _zk {
-	zkhandle_t* zk_handle;
+	ngx_str_t  host;
+	zhandle_t* zk_handle;
 	svr_t* svr;
 
 	ngx_log_t*  log;
@@ -33,5 +33,6 @@ typedef struct _zk {
 }zk;
 
 int init_zk(zk* pzk);
+void close_zk(zk* pzk);
 
 #endif

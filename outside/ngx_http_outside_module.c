@@ -1,6 +1,7 @@
 #include "outside.h"
 
 #include "conn.h"
+#include "zk.h"
 
 typedef struct _params {
 	ngx_str_t  key;
@@ -9,6 +10,11 @@ typedef struct _params {
 
 static ngx_int_t invoke_subrequest(ngx_http_request_t* r, outside_service_t* s)
 {
+	// check param
+	if (NULL == s) return NGX_ERROR;
+	if (s->uri.len == 0) return invoke_subrequest(r, ++s);
+	// if (s->fin == 1) return outside_post_handler(r);
+
 	ngx_http_outside_conf_t* cf = ngx_http_get_module_loc_conf(r, ngx_http_outside_module);
     if (cf == NULL) {
         ngx_log_error(NGX_LOG_DEBUG_HTTP, r->connection->log, 0, "[tzj] [invoke_subrequest] get_module error. \n");
@@ -66,6 +72,117 @@ static ngx_int_t verify_args(ngx_http_request_t* r)
 	return NGX_OK;
 }
 
+static void ngx_outside_tcp_read(ngx_event_t *rev)
+{
+    u_char                     *p;
+    size_t                      size;
+    ssize_t                     n;
+    u_short                     qlen;
+    ngx_buf_t                  *b;
+    ngx_connection_t           *c;
+
+    c = rev->data;
+	b = ngx_pcalloc(c->pool, sizeof(ngx_buf_t));
+
+    while (rev->ready) {
+        n = ngx_recv(c, b->last, b->end - b->last);
+
+        if (n == NGX_AGAIN) {
+            break;
+        }
+
+        if (n == NGX_ERROR || n == 0) {
+            goto failed;
+        }
+
+        b->last += n;
+
+        for ( ;; ) {
+            p = b->pos;
+            size = b->last - p;
+
+            if (size < 2) {
+                break;
+            }
+
+            qlen = (u_short) *p++ << 8;
+            qlen += *p++;
+
+            if (size < (size_t) (2 + qlen)) {
+                break;
+            }
+
+            // ngx_resolver_process_response(r, p, qlen, 1);
+
+            b->pos += 2 + qlen;
+        }
+
+        if (b->pos != b->start) {
+            b->last = ngx_movemem(b->start, b->pos, b->last - b->pos);
+            b->pos = b->start;
+        }
+    }
+
+    if (ngx_handle_read_event(rev, 0) != NGX_OK) {
+        goto failed;
+    }
+
+    return;
+
+failed:
+
+    ngx_close_connection(c);
+}
+static void ngx_outside_tcp_write(ngx_event_t *wev)
+{
+    off_t                       sent;
+    ssize_t                     n;
+    ngx_buf_t                  *b;
+    ngx_connection_t           *c;
+
+    c = wev->data;
+	b = ngx_pcalloc(c->pool, sizeof(ngx_buf_t));
+
+    if (wev->timedout) {
+        goto failed;
+    }
+
+    sent = c->sent;
+
+    while (wev->ready && b->pos < b->last) {
+        n = ngx_send(c, b->pos, b->last - b->pos);
+
+        if (n == NGX_AGAIN) {
+            break;
+        }
+
+        if (n == NGX_ERROR) {
+            goto failed;
+        }
+
+        b->pos += n;
+    }
+
+    if (b->pos != b->start) {
+        b->last = ngx_movemem(b->start, b->pos, b->last - b->pos);
+        b->pos = b->start;
+    }
+
+    if (c->sent != sent) {
+        ngx_add_timer(wev, (ngx_msec_t) (3 * 1000));
+    }
+
+    if (ngx_handle_write_event(wev, 0) != NGX_OK) {
+        goto failed;
+    }
+
+    return;
+
+failed:
+
+    ngx_close_connection(c);
+}
+
 static ngx_int_t ngx_http_outside_handler(ngx_http_request_t* r) 
 {
 	ngx_http_outside_conf_t* cf = ngx_http_get_module_loc_conf(r, ngx_http_outside_module);
@@ -78,9 +195,22 @@ static ngx_int_t ngx_http_outside_handler(ngx_http_request_t* r)
 	conn_t c;
 	ngx_memzero(&c, sizeof(c));
 	strncpy(c.host, "172.16.71.180", 64);
-	c.port = 12345;
+	c.port = 123456;
 	outside_connect(c, r->connection->log, &pc);
-	ngx_close_connection(pc);
+	pc->log = r->connection->log;
+	pc->pool = r->pool;
+	// ngx_close_connection(pc);
+	pc->read->handler  = ngx_outside_tcp_read;
+	pc->write->handler = ngx_outside_tcp_write;
+
+	zk* _zk = (zk*)ngx_pcalloc(r->pool, sizeof(zk));
+	_zk->log  = r->connection->log;
+	_zk->pool = r->pool;
+	_zk->host = cf->zk_host;
+	init_zk(_zk);
+
+	sleep(2);
+	// close_zk(_zk);
 
 	if (verify_args(r) == NGX_OK) {
     	//  Invoke first subrequest
@@ -115,38 +245,33 @@ static void* ngx_http_outside_create_loc_conf(ngx_conf_t* cf)
 	if (NULL == conf) {
 		return NGX_CONF_ERROR;
 	}
+
     ngx_str_null(&conf->user_filter.uri);
     conf->user_filter.fin = 0;
     ngx_str_null(&conf->finish.uri);
     conf->finish.fin = 1;
 
-
 	return conf;
 }
-static char* ngx_http_outside_merge_loc_conf(ngx_conf_t* cf, void* parent, void* child)
-{
-	ngx_http_outside_conf_t* prev = parent;
-	ngx_http_outside_conf_t* conf = child;
-	ngx_conf_merge_str_value(conf->user_filter.uri, prev->user_filter.uri, "test");
-	ngx_conf_merge_str_value(conf->finish.uri, prev->finish.uri, "test");
-	return NGX_CONF_OK;
-}
 
+static char* ngx_http_zk_host(ngx_conf_t* cf, ngx_command_t* cmd, void* conf)
+{
+	return ngx_conf_set_str_slot(cf, cmd, conf);
+}
 static char* ngx_http_outside(ngx_conf_t* cf, ngx_command_t* cmd, void* conf)
 {
 	ngx_http_core_loc_conf_t* clct = ngx_http_conf_get_module_loc_conf(cf, ngx_http_core_module); 
 	clct->handler = ngx_http_outside_handler;
-	ngx_conf_set_str_slot(cf, cmd, conf);
-	return NGX_CONF_OK;
+	return ngx_conf_set_str_slot(cf, cmd, conf);
 }
 
 // post handler
-static void outside_post_handler(ngx_http_request_t* r)
+static ngx_int_t outside_post_handler(ngx_http_request_t* r)
 {
 	if (r->headers_out.status != NGX_HTTP_OK)
 	{
 		ngx_http_finalize_request(r, r->headers_out.status);
-		return ;
+		return NGX_ERROR;
 	}
 
 	r->headers_out.content_type.len = sizeof("text/plain") - 1;
@@ -166,6 +291,7 @@ static void outside_post_handler(ngx_http_request_t* r)
 	ngx_http_send_header(r);
     ngx_int_t ret = ngx_http_output_filter(r, out_l);
 	ngx_http_finalize_request(r, ret);
+	return NGX_OK;
 }
 
 // Child post handler
@@ -179,7 +305,7 @@ static ngx_int_t outside_subrequest_post_handler(ngx_http_request_t* r, void* da
     ngx_chain_add_copy(pr->pool, (ngx_chain_t**)&pr->user_data, r->upstream->out_bufs);
 
     if (s->fin == 1) {
-        outside_post_handler(pr);
+        return outside_post_handler(pr);
     } else {
         // Invoke subrequest
         return invoke_subrequest(pr, ++s);
