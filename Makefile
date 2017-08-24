@@ -6,5 +6,4 @@ all:
 
 clean:
 	make clean -C ./nginx/
-	@rm -rf ./bin/*
 	@rm -rf ./logs/*

@@ -203,14 +203,6 @@ static ngx_int_t ngx_http_outside_handler(ngx_http_request_t* r)
 	pc->read->handler  = ngx_outside_tcp_read;
 	pc->write->handler = ngx_outside_tcp_write;
 
-	zk* _zk = (zk*)ngx_pcalloc(r->pool, sizeof(zk));
-	_zk->log  = r->connection->log;
-	_zk->pool = r->pool;
-	_zk->host = cf->zk_host;
-	init_zk(_zk);
-
-	sleep(2);
-	// close_zk(_zk);
 
 	if (verify_args(r) == NGX_OK) {
     	//  Invoke first subrequest
@@ -254,9 +246,20 @@ static void* ngx_http_outside_create_loc_conf(ngx_conf_t* cf)
 	return conf;
 }
 
-static char* ngx_http_zk_host(ngx_conf_t* cf, ngx_command_t* cmd, void* conf)
+static char* ngx_http_zk_host_post(ngx_conf_t* cf, void* data, void* conf)
 {
-	return ngx_conf_set_str_slot(cf, cmd, conf);
+	ngx_str_t* field = (ngx_str_t*)conf;
+
+	zk* _zk = (zk*)ngx_pcalloc(ngx_cycle->pool, sizeof(zk));
+	_zk->log  = ngx_cycle->log;
+	_zk->pool = ngx_cycle->pool;
+	_zk->host = *field;
+	init_zk(_zk);
+
+	sleep(2);
+	// close_zk(_zk);
+	
+    return NGX_CONF_OK;
 }
 static char* ngx_http_outside(ngx_conf_t* cf, ngx_command_t* cmd, void* conf)
 {

@@ -12,6 +12,7 @@ static void fn_get_zknode_children_completion(int rc, const struct String_vector
 		int i = 0;
 		for (; i < strings->count; ++i) {
     		ngx_log_debug(NGX_LOG_DEBUG_HTTP, pzk->log, 0, "[tzj] [fn_get_zknode_children_completion] data:  %s\n", strings->data[i]);
+			printf("[tzj...] [fn_get_zknode_children_completion] data: %s\n", strings->data[i]);
 			char buf[128] = "/live/service/";
 			strcat(buf, strings->data[i]);
 			zoo_awget_children(pzk->zk_handle, buf, fn_zk_children_watcher, pzk, fn_get_zknode_children_completion, pzk);
