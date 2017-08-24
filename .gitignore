@@ -56,7 +56,7 @@ nginx/
 test/
 
 # apis
-bin/
+bin/nginx
 logs/
 *_temp/
 tags
