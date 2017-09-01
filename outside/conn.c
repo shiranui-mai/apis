@@ -30,6 +30,7 @@ int outside_connect(conn_t conn, ngx_log_t *log, ngx_connection_t** cc)
 
         return NGX_ERROR;
     }
+	c->log = log;
 
 	*cc = c;
 
@@ -63,12 +64,7 @@ int outside_connect(conn_t conn, ngx_log_t *log, ngx_connection_t** cc)
         ngx_log_error(NGX_LOG_ERR, log, err, "[tzj] connect() to %s failed. err: %d",
                       conn.host, err);
 
-        if (err != NGX_EINPROGRESS
-#if (NGX_WIN32)
-            /* Winsock returns WSAEWOULDBLOCK (NGX_EAGAIN) */
-            && err != NGX_EAGAIN
-#endif
-            )
+        if (err != NGX_EINPROGRESS)
         {
             if (err == NGX_ECONNREFUSED
 #if (NGX_LINUX)

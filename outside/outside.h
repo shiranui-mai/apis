@@ -4,6 +4,7 @@
 #include <ngx_config.h>
 #include <ngx_core.h>
 #include <ngx_http.h>
+#include "zk.h"
 
 /* 3rd services */
 typedef struct {
@@ -75,6 +76,8 @@ static ngx_http_module_t ngx_http_outside_module_ctx = {
     // NULL, NULL
 };
 
+static ngx_int_t init_outside(ngx_cycle_t* cycle);
+static void exit_outside(ngx_cycle_t* cycle);
 ngx_module_t ngx_http_outside_module = {
 	NGX_MODULE_V1,
 	&ngx_http_outside_module_ctx,
@@ -82,10 +85,10 @@ ngx_module_t ngx_http_outside_module = {
 	NGX_HTTP_MODULE,
 	NULL,
 	NULL,
+	init_outside,
 	NULL,
 	NULL,
-	NULL,
-	NULL,
+	exit_outside,
 	NULL,
 	NGX_MODULE_V1_PADDING
 };

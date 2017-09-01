@@ -1,12 +1,14 @@
 #include "outside.h"
 
 #include "conn.h"
-#include "zk.h"
 
 typedef struct _params {
 	ngx_str_t  key;
 	ngx_str_t  val;
 }params;
+
+//static ngx_http_outside_conf_t* g_outside_conf = NULL; 
+static ngx_str_t* g_zk_host = NULL;
 
 static ngx_int_t invoke_subrequest(ngx_http_request_t* r, outside_service_t* s)
 {
@@ -197,12 +199,18 @@ static ngx_int_t ngx_http_outside_handler(ngx_http_request_t* r)
 	strncpy(c.host, "172.16.71.180", 64);
 	c.port = 123456;
 	outside_connect(c, r->connection->log, &pc);
-	pc->log = r->connection->log;
 	pc->pool = r->pool;
 	// ngx_close_connection(pc);
 	pc->read->handler  = ngx_outside_tcp_read;
 	pc->write->handler = ngx_outside_tcp_write;
 
+	/*zk* _zk = (zk*)ngx_pcalloc(ngx_cycle->pool, sizeof(zk));
+	_zk->log  = ngx_cycle->log;
+	_zk->pool = ngx_cycle->pool;
+	_zk->host = cf->zk_host;
+	init_zk(_zk);
+
+	sleep(2); */
 
 	if (verify_args(r) == NGX_OK) {
     	//  Invoke first subrequest
@@ -233,32 +241,23 @@ static ngx_int_t ngx_http_outside_handler(ngx_http_request_t* r)
 
 static void* ngx_http_outside_create_loc_conf(ngx_conf_t* cf)
 {
-	ngx_http_outside_conf_t* conf = ngx_pcalloc(cf->pool, sizeof(ngx_http_outside_conf_t));
-	if (NULL == conf) {
+	ngx_http_outside_conf_t* g_outside_conf = ngx_pcalloc(cf->pool, sizeof(ngx_http_outside_conf_t));
+	if (NULL == g_outside_conf) {
 		return NGX_CONF_ERROR;
 	}
 
-    ngx_str_null(&conf->user_filter.uri);
-    conf->user_filter.fin = 0;
-    ngx_str_null(&conf->finish.uri);
-    conf->finish.fin = 1;
+    ngx_str_null(&g_outside_conf->user_filter.uri);
+    g_outside_conf->user_filter.fin = 0;
+    ngx_str_null(&g_outside_conf->finish.uri);
+    g_outside_conf->finish.fin = 1;
 
-	return conf;
+	return g_outside_conf;
 }
 
 static char* ngx_http_zk_host_post(ngx_conf_t* cf, void* data, void* conf)
 {
-	ngx_str_t* field = (ngx_str_t*)conf;
-
-	zk* _zk = (zk*)ngx_pcalloc(ngx_cycle->pool, sizeof(zk));
-	_zk->log  = ngx_cycle->log;
-	_zk->pool = ngx_cycle->pool;
-	_zk->host = *field;
-	init_zk(_zk);
-
-	sleep(2);
-	// close_zk(_zk);
-	
+	// printf("[tzj] [ngx_http_zk_host_post] \n");
+	g_zk_host = conf;
     return NGX_CONF_OK;
 }
 static char* ngx_http_outside(ngx_conf_t* cf, ngx_command_t* cmd, void* conf)
@@ -324,4 +323,41 @@ static ngx_chain_t* get_last_chain(ngx_chain_t* ch)
         else ch = ch->next;
     }
     return ch;
+}
+
+static ngx_int_t init_outside(ngx_cycle_t* cycle)
+{
+    ngx_uint_t  i;
+    ngx_log_debug(NGX_LOG_DEBUG_HTTP, cycle->log, 0, "[tzj] [init_outside] start!\n");
+    for (i = 0; cycle->modules[i]; i++) {
+		if ((cycle->modules[i]->name) && (ngx_strncmp(cycle->modules[i]->name, "ngx_http_outside_module", sizeof("ngx_http_outside_module")) == 0)) {
+			
+				// ngx_log_debug(NGX_LOG_DEBUG_HTTP, cycle->log, 0, "[tzj] [init_outside] module.name: %s. zk_host: %V\n", cycle->modules[i]->name, g_zk_host);
+
+				zk* _zk = (zk*)ngx_pcalloc(cycle->pool, sizeof(zk));
+				_zk->log  = cycle->log;
+				_zk->pool = cycle->pool;
+				_zk->host = *g_zk_host;
+				init_zk(_zk);
+
+				sleep(2);
+				cycle->modules[i]->spare_hook1 = (uintptr_t)_zk;
+				// close_zk(_zk);
+				break;
+		}
+	}
+	return NGX_OK;
+}
+static void exit_outside(ngx_cycle_t* cycle)
+{
+    ngx_uint_t  i;
+    ngx_log_debug(NGX_LOG_DEBUG_HTTP, cycle->log, 0, "[tzj] [exit_outside] start!\n");
+    for (i = 0; cycle->modules[i]; i++) {
+		if (ngx_strncmp(cycle->modules[i]->name, "ngx_http_outside_module", 23) == 0) {
+			
+				ngx_log_debug(NGX_LOG_DEBUG_HTTP, cycle->log, 0, "[tzj] [exit_outside] module.name: %s \n", cycle->modules[i]->name);
+				close_zk((zk*)cycle->modules[i]->spare_hook1);
+				break;
+		}
+	}
 }
